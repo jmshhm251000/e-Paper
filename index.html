@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Waveshare e-Ink Uploader</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      display: flex;
+      flex-direction: row;
+      background-color: #f8f8f8;
+      padding: 40px;
+      overflow-x: hidden; /* Prevent horizontal scrollbar */
+    }
+
+    #sidebar {
+      width: 200px;
+      overflow-y: auto;
+      overflow-x: hidden; /* Hide horizontal scrollbar */
+      max-height: 80vh;
+      margin-right: 40px;
+    }
+
+    #sidebar img {
+      width: 100%;
+      max-width: 100%;
+      box-sizing: border-box;
+      margin-bottom: 10px;
+      cursor: pointer;
+      border: 2px solid transparent;
+    }
+
+    #sidebar img:hover {
+      border-color: #007BFF;
+    }
+
+    #main {
+      flex-grow: 1;
+      text-align: center;
+    }
+
+    input[type="file"],
+    input[type="text"] {
+      margin-top: 20px;
+      padding: 8px;
+      font-size: 14px;
+      width: 300px;
+    }
+
+    button {
+      margin-top: 10px;
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+
+    img#preview {
+      margin-top: 30px;
+      border: 1px solid #ccc;
+      max-width: 100%;
+      max-height: 400px;
+    }
+
+    #status {
+      margin-top: 20px;
+      font-weight: bold;
+      color: green;
+    }
+  </style>
+</head>
+<body>
+  <div id="sidebar"></div>
+
+  <div id="main">
+    <h1>Upload Image for Waveshare e-Paper</h1>
+
+    <!-- Upload Section -->
+    <input type="file" id="imageInput" accept="image/*" />
+    <br />
+    <button onclick="uploadImage()">Upload</button>
+
+    <!-- Display Section -->
+    <br /><br />
+    <input type="text" id="fileNameInput" placeholder="Enter BMP file name (e.g., image.bmp)" />
+    <br />
+    <button onclick="displayImage()">Display</button>
+
+    <!-- Status + Preview -->
+    <div id="status"></div>
+    <img id="preview" src="" alt="BMP Preview" />
+  </div>
+
+  <script>
+    async function fetchImageList() {
+      const sidebar = document.getElementById("sidebar");
+      sidebar.innerHTML = "";
+
+      try {
+        const res = await fetch("/images");
+        const images = await res.json();
+
+        images.forEach(img => {
+          const imgElem = document.createElement("img");
+          imgElem.src = `/static/${img}`;
+          imgElem.alt = img;
+          imgElem.onclick = () => {
+            document.getElementById("fileNameInput").value = img.replace(/\.png$/, ".bmp");
+            document.getElementById("preview").src = `/static/${img}?t=${Date.now()}`;
+          };
+          sidebar.appendChild(imgElem);
+        });
+      } catch (err) {
+        console.error("Failed to load image list", err);
+      }
+    }
+
+    async function uploadImage() {
+      const input = document.getElementById("imageInput");
+      const status = document.getElementById("status");
+      const preview = document.getElementById("preview");
+
+      if (!input.files.length) {
+        alert("Please select an image.");
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append("file", input.files[0]);
+
+      status.textContent = "Uploading and processing...";
+
+      try {
+        const res = await fetch("/upload/", {
+          method: "POST",
+          body: formData
+        });
+
+        const data = await res.json();
+
+        if (res.ok) {
+          status.textContent = "Image processed and preview available.";
+          preview.src = data.preview + "?t=" + Date.now();
+          await fetchImageList();
+        } else {
+          status.textContent = "Error: " + (data.detail || "Unknown error");
+        }
+      } catch (err) {
+        status.textContent = "Error uploading image.";
+        console.error(err);
+      }
+    }
+
+    async function displayImage() {
+      const fileName = document.getElementById("fileNameInput").value.trim();
+      const status = document.getElementById("status");
+
+      if (!fileName) {
+        alert("Please enter a BMP file name.");
+        return;
+      }
+
+      status.textContent = "Sending image to e-Paper display...";
+
+      try {
+        const res = await fetch("/display", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ file_name: fileName })
+        });
+
+        const data = await res.json();
+
+        if (res.ok) {
+          status.textContent = "Image sent to e-Paper display successfully!";
+        } else {
+          status.textContent = "Error: " + (data.detail || "Unknown error");
+        }
+      } catch (err) {
+        status.textContent = "Failed to send image.";
+        console.error(err);
+      }
+    }
+
+    window.onload = fetchImageList;
+  </script>
+</body>
+</html>
